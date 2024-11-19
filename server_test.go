@@ -1,26 +1,20 @@
 package rpcdemo
 
 import (
-	"context"
 	"testing"
+	"time"
 )
 
-func TestServer_Start(t *testing.T) {
-	s := NewServer()
-	s.RegisterService(&UserServiceServer{})
-	s.Start(":8082")
-}
+func TestServe(t *testing.T) {
 
-type UserServiceServer struct {
-}
-
-func (u *UserServiceServer) Name() string {
-	return "user-service"
-}
-
-func (u *UserServiceServer) GetById(ctx context.Context, req *GetByIdReq) (*GetByIdResp, error) {
-	return &GetByIdResp{
-		Name: "tom",
-		Id:   req.Id,
-	}, nil
+	opts := &ServerOptions{
+		network: "tcp",
+		address: "127.0.0.1:8000",
+		timeout: time.Millisecond * 1000,
+	}
+	s := &service{}
+	go func() {
+		s.Serve(opts)
+	}()
+	s.Close()
 }

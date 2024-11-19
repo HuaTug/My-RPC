@@ -2,173 +2,269 @@ package rpcdemo
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
-	"net"
+	logs "log"
+	"os"
+	"os/signal"
 	"reflect"
+	"syscall"
 
-	"HuaTug.com/message"
-	"HuaTug.com/serialize"
-	"HuaTug.com/serialize/json"
+	"HuaTug.com/interceptor"
+	"HuaTug.com/log"
+	"HuaTug.com/plugin"
+	"HuaTug.com/plugin/jaeger"
 )
 
 type Server struct {
-	services    map[string]reflectionStub
-	serializers []serialize.Serializer
+	opts    *ServerOptions
+	service Service
+	plugins []plugin.Plugin
+	closing bool
 }
 
-type reflectionStub struct {
-	value       reflect.Value
-	serializers []serialize.Serializer
-}
-
-func NewServer() *Server {
-	res := &Server{
-		services:    map[string]reflectionStub{},
-		serializers: make([]serialize.Serializer, 256),
+func NewServer(opts ...ServerOption) *Server {
+	s := &Server{
+		opts: &ServerOptions{},
+	}
+	for _, o := range opts {
+		o(s.opts)
 	}
 
-	res.RegisterSerializer(json.SerializerJson{}) // 默认支持json序列化
+	s.service = NewService(s.opts)
 
-	return res
+	for pluginName, plugin := range plugin.PluginMap {
+		if !containPlugin(pluginName, s.opts.pluginNames) {
+			continue
+		}
+		s.plugins = append(s.plugins, plugin)
+	}
+
+	return s
 }
 
-func (s *Server) MustRegister(service Service) {
-	if err := s.RegisterService(service); err != nil {
-		panic(err)
+func NewService(opts *ServerOptions) Service {
+	return &service{
+		opts: opts,
 	}
 }
 
-func (s *Server) RegisterService(service Service) error {
-	s.services[service.Name()] = reflectionStub{
-		value:       reflect.ValueOf(service),
-		serializers: s.serializers,
+func containPlugin(pluginName string, plugins []string) bool {
+	for _, plugin := range plugins {
+		if plugin == pluginName {
+			return true
+		}
 	}
-	return nil
-}
-func (s *Server) RegisterSerializer(serializer serialize.Serializer) {
-	s.serializers[serializer.Code()] = serializer
+	return false
 }
 
-func (s *Server) Start(addr string) error {
-	listener, err := net.Listen("tcp", addr)
+type emptyInterface interface{}
+
+/*
+假设在未来，我们决定为服务添加特定的接口要求，例如所有服务都必须实现一个 DoSomething 方法。
+
+	type ServiceInterface interface {
+	    DoSomething(ctx context.Context, req *RequestType) (*ResponseType, error)
+	}
+
+此时，我们可以修改 ServiceDesc 中的 HandlerType 字段，使其不再是空接口，而是我们的 ServiceInterface：
+
+	type ServiceDesc struct {
+	    ServiceName string
+	    HandlerType ServiceInterface // 修改为具体的接口
+	    Svr         interface{}
+	}
+
+*/
+// 服务端注册服务
+
+func (s *Server) RegisterService(serviceName string, svr interface{}) error {
+	svrType := reflect.TypeOf(svr)
+	srvValue := reflect.ValueOf(svr)
+
+	sd := &ServiceDesc{
+		ServiceName: serviceName,
+		HandlerType: (*emptyInterface)(nil),
+		Svr:         svr,
+	}
+
+	methods, err := getServiceMethods(svrType, srvValue)
 	if err != nil {
 		return err
 	}
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			//log.Println("accpect connection failed,err: ", err)
-			continue
-		}
-		//log.Println("receiver connection: ", conn.RemoteAddr(), "->", conn.LocalAddr())
-		go func() {
-			if err := s.HandleConn(conn); err != nil {
-				//log.Println("handle connection failed,err: ", err)
-				conn.Close()
-				return
-			}
-		}()
-	}
+	sd.Methods = methods
+
+	logs.Printf("register service: %s", serviceName)
+	s.Register(sd, svr)
+
+	return nil
 }
 
-// RPC服务端来处理请求
-func (s *Server) HandleConn(conn net.Conn) error {
-	for {
-		// 读请求
-		// 执行
-		// 写回响应
+func getServiceMethods(serviceType reflect.Type, servieValue reflect.Value) ([]*MethodDesc, error) {
 
-		reqMsg, err := ReadMsg(conn)
-		if err != nil {
-			return err
+	var methods []*MethodDesc
+
+	for i := 0; i < serviceType.NumMethod(); i++ {
+		method := serviceType.Method(i)
+
+		if err := checkMethod(method.Type); err != nil {
+			return nil, err
 		}
 
-		req := message.DecodeReq(reqMsg)
-		//log.Println(req)
-		resp := &message.Response{
-			MessageId:  req.MessageId,
-			Version:    req.Version,
-			Compressor: req.Compressor,
-			Serializer: req.Serializer,
-		}
-		// ping探活请求处理
-		if req.Ping == PingPong {
-			resp.Pong = PingPong
-			resp.CalcHeadLength()
-			_, err = conn.Write(message.EncodeResp(resp))
-			if err != nil {
-				return err
+		methodHandler := func(ctx context.Context, svr interface{}, dec func(interface{}) error, ceps []interceptor.ServerInterceptor) (interface{}, error) {
+			reqType := method.Type.In(2)
+
+			req := reflect.New(reqType.Elem()).Interface()
+
+			if err := dec(req); err != nil {
+				return nil, err
 			}
 
-			continue
-		}
-		log.Print("Name: ", req.ServiceName)
-		// 找到本地对应的服务
-		service, ok := s.services[req.ServiceName]
-		if !ok {
-			resp.Error = []byte("找不到对应服务")
-			resp.CalcHeadLength()
-			_, err = conn.Write(message.EncodeResp(resp))
-			if err != nil {
-				return err
+			if len(ceps) == 0 {
+				values := method.Func.Call([]reflect.Value{servieValue, reflect.ValueOf(ctx), reflect.ValueOf(req)})
+				return values[0].Interface(), nil
 			}
 
-			continue
-		}
-		ctx := context.Background()
-		//log.Print("执行本地服务:", req)
-		data, err := service.invoke(ctx, req)
-		if err != nil {
-			resp.Error = []byte(err.Error())
-			resp.CalcHeadLength()
-			_, err = conn.Write(message.EncodeResp(resp))
-			if err != nil {
-				return err
+			// 执行拦截器
+			handler := func(ctx context.Context, reqbody interface{}) (interface{}, error) {
+				values := method.Func.Call([]reflect.Value{servieValue, reflect.ValueOf(ctx), reflect.ValueOf(req)})
+
+				return values[0].Interface(), nil
 			}
-
-			continue
+			return interceptor.ServerIntercept(ctx, req, ceps, handler)
 		}
 
-		resp.Data = data
-		resp.BodyLength = uint32(len(data))
-		resp.CalcHeadLength()
-		bitFlow := message.EncodeResp(resp)
-		_, err = conn.Write(bitFlow)
-		if err != nil {
-			return err
-		}
-
+		methods = append(methods, &MethodDesc{
+			MethodName: method.Name,
+			Handler:    methodHandler,
+		})
 	}
+
+	return methods, nil
 }
 
-func (s *reflectionStub) invoke(ctx context.Context, req *message.Request) ([]byte, error) {
-	methodName := req.MethodName
-	data := req.Data
+func checkMethod(method reflect.Type) error {
 
-	serializer := s.serializers[req.Serializer]
-	if serializer == nil {
-		return nil, errors.New("不支持的序列化协议")
+	// 要保证有两个自己给的参数，外加一个自己的参数 个数>=3
+	if method.NumIn() < 3 {
+		return fmt.Errorf("method %s invalid,the number of params < 2", method.Name())
 	}
 
-	// 具体来说，s.value.MethodByName(methodName) 会根据提供的 methodName 字符串查找并返回对应的方法。
-	method := s.value.MethodByName(methodName)
-	if !method.IsValid() {
-		return nil, errors.New(fmt.Sprintf("%s%s", "服务下不存在该方法，方法名为：", methodName))
+	if method.NumOut() != 2 {
+		return fmt.Errorf("method %s invalid, the number of return values != 2", method.Name())
 	}
-	// method.Type() 是一个反射相关的方法，它用于获取一个 reflect.Value 类型的值所表示的方法的类型信息
-	inType := method.Type().In(1)                  // 获取索引为1的参数的类型
-	in := reflect.New(inType.Elem())               // 创建一个新的值，返回一个指向该类型(inType.Elem)的指针
-	err := serializer.Decode(data, in.Interface()) //根据in的类型，将data反序列化为in
+
+	ctxType := method.In(1)
+	var contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
+	if !ctxType.Implements(contextType) {
+		return fmt.Errorf("method %s invalid, the first param is not context.Context", method.Name())
+	}
+
+	argType := method.In(2)
+	if argType.Kind() != reflect.Ptr {
+		return fmt.Errorf("method %s invalid, req type is not a pointer", method.Name())
+	}
+
+	replyType := method.Out(0)
+	if replyType.Kind() != reflect.Ptr {
+		return fmt.Errorf("method %s invalid, reply type is not a pointer", method.Name())
+	}
+
+	errType := method.Out(1)
+	var errorType = reflect.TypeOf((*error)(nil)).Elem()
+	if !errType.Implements(errorType) {
+		return fmt.Errorf("method %s invalid, returns %s , not error", method.Name(), errType.Name())
+	}
+
+	return nil
+}
+
+func (s *Server) Register(sd *ServiceDesc, svr interface{}) {
+	if sd == nil || svr == nil {
+		return
+	}
+
+	ht := reflect.TypeOf(sd.HandlerType).Elem()
+	st := reflect.TypeOf(svr)
+	logs.Print("st is:", st)
+	logs.Print("ht is:", ht)
+	if !st.Implements(ht) {
+		log.Fatalf("handlerType %v not match service : %v ", ht, st)
+	}
+
+	ser := &service{
+		svr:         svr,
+		serviceName: sd.ServiceName,
+		handlers:    make(map[string]Handler),
+	}
+
+	for _, method := range sd.Methods {
+		ser.handlers[method.MethodName] = method.Handler
+	}
+
+	s.service = ser
+}
+
+func (s *Server) Serve() {
+	err := s.InitPlugins()
 	if err != nil {
-		return nil, err
-	}
-	res := method.Call([]reflect.Value{reflect.ValueOf(ctx), in})
-	if len(res) > 1 && !res[1].IsZero() {
-		return nil, res[1].Interface().(error)
+		panic(err)
 	}
 
-	return serializer.Encode(res[0].Interface())
+	s.service.Serve(s.opts)
+
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGSEGV)
+	<-ch
+
+	s.Close()
+}
+
+type emptyServicee struct{}
+
+func (s *Server) ServerHttp() {
+	if err := s.RegisterService("/http", new(emptyServicee)); err != nil {
+		panic(err)
+	}
+
+	s.Serve()
+}
+
+func (s *Server) Close() {
+	s.closing = true
+	s.service.Close()
+}
+func (s *Server) InitPlugins() error {
+	for _, p := range s.plugins {
+
+		switch val := p.(type) {
+		case plugin.ResolverPlugin:
+			var services []string
+
+			pluginOpts := []plugin.Option{
+				plugin.WithSelectorSvrAddr(s.opts.selectorSvrAddr),
+				plugin.WithSvrAddr(s.opts.address),
+				plugin.WithServices(services),
+			}
+			if err := val.Init(pluginOpts...); err != nil {
+				log.Errorf("resolver init error: %v", err)
+				return err
+			}
+		case plugin.TracingPlugin:
+			pluginOpts := []plugin.Option{
+				plugin.WithTracingSvrAddr(s.opts.tracingSvrAddr),
+			}
+
+			tracer, err := val.Init(pluginOpts...)
+			if err != nil {
+				log.Errorf("tracing init error: %v", err)
+				return err
+			}
+
+			s.opts.interceptors = append(s.opts.interceptors, jaeger.OpenTracingServerInterceptor(tracer, s.opts.tracingSpanName))
+		default:
+
+		}
+	}
+	return nil
 }

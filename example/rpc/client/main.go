@@ -3,60 +3,33 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"sync"
+	"time"
 
-	rpcdemo "HuaTug.com"
-	"HuaTug.com/serialize/json"
+	"HuaTug.com/client"
+	"HuaTug.com/testdata"
 )
 
 func main() {
-
-	c, err := rpcdemo.NewClient("localhost:8080", json.SerializerJson{})
-	if err != nil {
-		panic(err)
+	opts := []client.Option{
+		client.WithTarget("localhost:8000"),
+		client.WithNetwork("tcp"),
+		client.WithTimeout(2000 * time.Millisecond),
+		client.WithSerializationType("msgpack"),
 	}
 
-	us := &UserService{}
-	ups := &UserParentService{}
-	err = c.InitStub(us)
-	if err != nil {
-		panic(err)
+	c := client.DefaultClient
+	// req := &testdata.CalculateRequest{
+	// 	Operation: "subtract",
+	// 	Num1:      1,
+	// 	Num2:      2,
+	// }
+	req := &testdata.CalculateRequest{
+		Operation: "multiply",
+		Num1:      3.5,
+		Num2:      6,
 	}
-	err = c.InitStub(ups)
-	if err != nil {
-		panic(err)
-	}
+	rsp := &testdata.CalculateReply{}
+	err := c.Call(context.Background(), "/test.Greeter/Calculate", req, rsp, opts...)
+	fmt.Print(rsp.Result, err)
 
-	wg := sync.WaitGroup{}
-	wg.Add(20)
-	for j := 0; j < 10; j++ {
-		i := j // Capture the current value of j// Move Add here to better reflect the number of goroutines
-		go func(id int64) {
-			defer wg.Done()
-			res, err := us.GetById(context.Background(), &GetByIdReq{
-				Id: id,
-			})
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			log.Println(fmt.Sprintf("%+v", res))
-		}(int64(i)) // Pass i to the goroutine
-
-		go func(id int64) {
-			defer wg.Done()
-			res, err := ups.GetParentById(context.Background(), &GetParentByIdReq{
-				Id: id,
-			})
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			log.Println(fmt.Sprintf("%+v", res))
-		}(int64(i)) // Pass i to the goroutine
-	}
-	wg.Wait()
-
-	c.Close()
 }

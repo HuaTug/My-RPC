@@ -1,23 +1,22 @@
 package main
 
 import (
+	"time"
+
 	rpcdemo "HuaTug.com"
-	"HuaTug.com/serialize/json"
-	"HuaTug.com/serialize/protobuf"
+	"HuaTug.com/testdata"
 )
 
 func main() {
-	srv := rpcdemo.NewServer()
-
-	// 注册服务
-	srv.MustRegister(&UserService{})
-	srv.MustRegister(&UserParentService{})
-
-	// 注册server支持的序列化协议
-	srv.RegisterSerializer(json.SerializerJson{})
-	srv.RegisterSerializer(protobuf.SerializeProto{})
-
-	if err := srv.Start("localhost:8080"); err != nil {
+	opts := []rpcdemo.ServerOption{
+		rpcdemo.WithAddress("localhost:8000"),
+		rpcdemo.WithNetwork("tcp"),
+		rpcdemo.WithSerializationType("msgpack"),
+		rpcdemo.WithTimeout(time.Millisecond * 2000),
+	}
+	s := rpcdemo.NewServer(opts ...)
+	if err := s.RegisterService("/test.Greeter", new(testdata.CalculatorService)); err != nil {
 		panic(err)
 	}
+	s.Serve()
 }

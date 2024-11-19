@@ -1,0 +1,2 @@
+2024/11/20 00:14:53 server.go:172: [FATAL] ht is not an interface type in Register method
+2024/11/20 00:15:11 server.go:172: [FATAL] ht is not an interface type in Register method
