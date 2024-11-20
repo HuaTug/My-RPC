@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"HuaTug.com/codec"
 	"HuaTug.com/codes"
@@ -83,6 +84,7 @@ func (c *defaultClient) Invoke(ctx context.Context, req, rsp interface{}, path s
 	clientStream.WithMethod(method)
 
 	// execute the interceptor first
+	//log.Println("invoke interceptor...", c.opts.interceptors)
 	return interceptor.ClientIntercept(newCtx, req, rsp, c.opts.interceptors, c.invoke)
 }
 
@@ -93,7 +95,7 @@ func (c *defaultClient) invoke(ctx context.Context, req, rsp interface{}) error 
 	if err != nil {
 		return codes.NewFrameworkError(codes.ClientMsgErrorCode, "request marshal failed ...")
 	}
-
+	//log.Println("request payload : ", payload)
 	clientCodec := codec.GetCodec(c.opts.protocol)
 
 	// assemble header
@@ -126,8 +128,8 @@ func (c *defaultClient) invoke(ctx context.Context, req, rsp interface{}) error 
 	if err != nil {
 		return err
 	}
-
-	// parse protocol header
+	// parse protocol header 
+	// 客户端和服务端之间的通信使用proto协议（这是第一层）
 	response := &protocol.Response{}
 	if err = proto.Unmarshal(rspbuf, response); err != nil {
 		return err
@@ -137,8 +139,14 @@ func (c *defaultClient) invoke(ctx context.Context, req, rsp interface{}) error 
 		return codes.New(response.RetCode, response.RetMsg)
 	}
 
-	return serialization.Unmarshal(response.Payload, rsp)
-
+	// return serialization.Unmarshal(response.Payload, rsp)
+	// 客户端和服务端之间第二次通信使用msgpack协议（这是第二层）,此时再解析消息的时候需要再次对其进行反序列化
+	err = serialization.Unmarshal(response.Payload, rsp)
+	if err != nil {
+		return err
+	}
+	log.Println("response payload : ", rsp)
+	return nil
 }
 
 func (c *defaultClient) NewClientTransport() transport.ClientTransport {
@@ -147,13 +155,14 @@ func (c *defaultClient) NewClientTransport() transport.ClientTransport {
 
 func addReqHeader(ctx context.Context, client *defaultClient, payload []byte) *protocol.Request {
 	clientStream := stream.GetClientStream(ctx)
-
+	//log.Println("clientStream : ", clientStream)
 	servicePath := fmt.Sprintf("/%s/%s", clientStream.ServiceName, clientStream.Method)
 	md := metadata.ClientMetadata(ctx)
 
 	// fill the authentication information
 	for _, pra := range client.opts.perRPCAuth {
 		authMd, _ := pra.GetMetadata(ctx)
+		log.Println(authMd)
 		for k, v := range authMd {
 			md[k] = []byte(v)
 		}

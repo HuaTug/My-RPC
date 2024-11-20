@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"HuaTug.com/plugin"
@@ -90,6 +91,7 @@ func (e *Etcd) Init(opts ...plugin.Option) error {
 	for _, o := range opts {
 		o(e.opts)
 	}
+	log.Println(e.opts.Services)
 	if len(e.opts.Services) == 0 || e.opts.SvrAddr == "" || e.opts.SelectorSvrAddr == "" {
 		return fmt.Errorf("etcd init error, len(services) : %d, svrAddr : %s, selectorSvrAddr : %s",
 			len(e.opts.Services), e.opts.SvrAddr, e.opts.SelectorSvrAddr)

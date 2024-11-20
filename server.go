@@ -81,6 +81,8 @@ func (s *Server) RegisterService(serviceName string, svr interface{}) error {
 	svrType := reflect.TypeOf(svr)
 	srvValue := reflect.ValueOf(svr)
 
+	logs.Println("svrType is: ", svrType)
+	logs.Println("svrValue is: ", srvValue)
 	sd := &ServiceDesc{
 		ServiceName: serviceName,
 		HandlerType: (*emptyInterface)(nil),
@@ -115,7 +117,6 @@ func getServiceMethods(serviceType reflect.Type, servieValue reflect.Value) ([]*
 			reqType := method.Type.In(2)
 
 			req := reflect.New(reqType.Elem()).Interface()
-
 			if err := dec(req); err != nil {
 				return nil, err
 			}
@@ -240,7 +241,7 @@ func (s *Server) InitPlugins() error {
 		switch val := p.(type) {
 		case plugin.ResolverPlugin:
 			var services []string
-
+			services = append(services, s.service.Name())
 			pluginOpts := []plugin.Option{
 				plugin.WithSelectorSvrAddr(s.opts.selectorSvrAddr),
 				plugin.WithSvrAddr(s.opts.address),

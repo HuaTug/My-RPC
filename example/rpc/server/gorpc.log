@@ -1,2 +1,11 @@
 2024/11/20 00:14:53 server.go:172: [FATAL] ht is not an interface type in Register method
 2024/11/20 00:15:11 server.go:172: [FATAL] ht is not an interface type in Register method
+2024/11/20 11:24:46 server_transport.go:208: [ERROR] server Handle error: type : framework, code : 401, msg : token invalid
+2024/11/20 21:38:43 server.go:251: [ERROR] resolver init error: etcd init error, len(services) : 0, svrAddr : localhost:8000, selectorSvrAddr : localhost:8500
+2024/11/20 21:39:16 server.go:251: [ERROR] resolver init error: etcd init error, len(services) : 0, svrAddr : localhost:8000, selectorSvrAddr : localhost:2379
+2024/11/20 21:45:27 server.go:251: [ERROR] resolver init error: etcd init error, len(services) : 0, svrAddr : localhost:8000, selectorSvrAddr : localhost:2379
+2024/11/20 23:01:40 server.go:251: [ERROR] resolver init error: etcd init error, len(services) : 1, svrAddr : , selectorSvrAddr : localhost:2379
+2024/11/20 23:02:02 server.go:251: [ERROR] resolver init error: etcd init error, len(services) : 1, svrAddr : , selectorSvrAddr : localhost:2379
+2024/11/20 23:02:31 server.go:251: [ERROR] resolver init error: etcd init error, len(services) : 1, svrAddr : , selectorSvrAddr : localhost:2379
+2024/11/20 23:02:46 server.go:251: [ERROR] resolver init error: etcd init error, len(services) : 1, svrAddr : , selectorSvrAddr : localhost:2379
+2024/11/20 23:12:53 server_transport.go:208: [ERROR] server Handle error: handlers is nil

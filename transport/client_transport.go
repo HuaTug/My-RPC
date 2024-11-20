@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"log"
 
 	"HuaTug.com/codes"
 )
@@ -64,6 +65,8 @@ func (c *clientTransport) Send(ctx context.Context, req []byte, opts ...ClientTr
 func (c *clientTransport) SendTcpReq(ctx context.Context, req []byte) ([]byte, error) {
 
 	// service discovery
+	// 通过在Etcd中实现Selector接口，实现服务发现
+	log.Println("service_name: ", c.opts.ServiceName)
 	addr, err := c.opts.Selector.Select(c.opts.ServiceName)
 	if err != nil {
 		return nil, err
@@ -71,7 +74,7 @@ func (c *clientTransport) SendTcpReq(ctx context.Context, req []byte) ([]byte, e
 
 	// defaultSelector returns "", use the target as address
 	if addr == "" {
-		addr = c.opts.Target
+		addr = c.opts.Target //此时模拟的是一个简单的过程 只有一个服务地址
 	}
 
 	conn, err := c.opts.Pool.Get(ctx, c.opts.Network, addr)
@@ -81,7 +84,7 @@ func (c *clientTransport) SendTcpReq(ctx context.Context, req []byte) ([]byte, e
 	}
 
 	defer conn.Close()
-
+	// 模仿gRPC 发送数据(分块发送数据)
 	sendNum := 0
 	num := 0
 	for sendNum < len(req) {
@@ -95,17 +98,17 @@ func (c *clientTransport) SendTcpReq(ctx context.Context, req []byte) ([]byte, e
 			return nil, err
 		}
 	}
-
 	// parse frame
 	wrapperConn := wrapConn(conn)
 	frame, err := wrapperConn.framer.ReadFrame(conn)
 	if err != nil {
 		return nil, err
 	}
-
+	log.Println("frame: ", frame)
 	return frame, err
 }
 
+// isDone 判断是否超时或者被异常中断
 func isDone(ctx context.Context) error {
 	select {
 	case <-ctx.Done():

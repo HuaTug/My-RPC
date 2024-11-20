@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"time"
 
 	"HuaTug.com/codes"
 	"HuaTug.com/interceptor"
@@ -21,6 +22,7 @@ func NewOAuth2ByToken(token string) *oAuth2 {
 	return &oAuth2{
 		token: &oauth2.Token{
 			AccessToken: token,
+			Expiry:      time.Now().Add(time.Hour),
 		},
 	}
 }

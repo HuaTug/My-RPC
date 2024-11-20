@@ -12,6 +12,7 @@ import (
 	"HuaTug.com/codes"
 )
 
+// 抽象出一个接口，分别服务于TCP和UDP协议
 const DefaultPayloadLength = 1024
 const MaxPayloadLength = 4 * 1024 * 1024
 
