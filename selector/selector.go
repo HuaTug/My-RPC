@@ -1,0 +1,46 @@
+package selector
+
+// Selector obtains a service node through service discovery and load balancing
+type Selector interface {
+	Select(string) (string, error)
+}
+
+type defaultSelector struct {
+}
+
+// Options defines Selector options
+type Options struct {
+}
+
+type Option func(*Options)
+
+func init() {
+	RegisterSelector("default", DefaultSelector)
+}
+
+// DefaultSelector is a global default Selector
+var DefaultSelector = &defaultSelector{}
+
+// 在微服务架构中，不同的选择器对应于不同的负载均衡策略
+var selectorMap = make(map[string]Selector)
+
+
+// RegisterSelector supports business custom registered Selector
+func RegisterSelector(name string, selector Selector) {
+	if selectorMap == nil {
+		selectorMap = make(map[string]Selector)
+	}
+	selectorMap[name] = selector
+}
+
+func (d *defaultSelector) Select(serviceName string) (string, error) {
+	return "", nil
+}
+
+// GetSelector get a selector by a given selector name
+func GetSelector(name string) Selector {
+	if selector, ok := selectorMap[name]; ok {
+		return selector
+	}
+	return DefaultSelector
+}
