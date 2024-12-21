@@ -153,7 +153,6 @@ func (c *defaultClient) invoke(ctx context.Context, req, rsp interface{}) error 
 		return err
 	}
 
-	log.Println("response payload : ", rsp)
 	return nil
 }
 
