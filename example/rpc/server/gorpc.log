@@ -1,0 +1,7 @@
+2024/12/26 17:17:25 server.go:260: [ERROR] resolver init error: Invalid key. Key must not begin with a '/': /test.Greeter/localhost:8000
+2024/12/26 17:20:25 server.go:260: [ERROR] resolver init error: Invalid key. Key must not begin with a '/': /test.Greeter/localhost:8000
+2024/12/26 17:20:42 server.go:260: [ERROR] resolver init error: Invalid key. Key must not begin with a '/': /test.Greeter/localhost:8000
+2024/12/26 17:22:43 server.go:261: [ERROR] resolver init error: Invalid key. Key must not begin with a '/': /test.Greeter/localhost:8000
+2024/12/26 17:23:33 server.go:261: [ERROR] resolver init error: Invalid key. Key must not begin with a '/': /test.Greeter/localhost:8000
+2024/12/26 17:24:35 server.go:260: [ERROR] resolver init error: consul init error, len(services) : 0, svrAddr : localhost:8000, selectorSvrAddr : localhost:8500
+2024/12/26 17:27:49 server.go:259: [ERROR] resolver init error: consul init error, len(services) : 0, svrAddr : localhost:8000, selectorSvrAddr : localhost:8500

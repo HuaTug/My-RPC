@@ -9,7 +9,7 @@ import (
 	rpcdemo "github.com/HuaTug/My-RPC"
 	"github.com/HuaTug/My-RPC/auth"
 	"github.com/HuaTug/My-RPC/metadata"
-	"github.com/HuaTug/My-RPC/plugin/etcd"
+	"github.com/HuaTug/My-RPC/plugin/consul"
 	"github.com/HuaTug/My-RPC/plugin/jaeger"
 	"github.com/HuaTug/My-RPC/testdata"
 )
@@ -36,13 +36,13 @@ func main() {
 		rpcdemo.WithSerializationType("msgpack"),
 		rpcdemo.WithTimeout(time.Millisecond * 2000),
 		rpcdemo.WithInterceptor(auth.BuildAuthInterceptor(af)),
-		rpcdemo.WithSelectorSvrAddr("localhost:2379"),
-		rpcdemo.WithPlugin(etcd.Name, jaeger.Name),
+		rpcdemo.WithSelectorSvrAddr("localhost:8500"),
+		rpcdemo.WithPlugin(consul.Name, jaeger.Name),
 		rpcdemo.WithTracingSvrAddr("localhost:6831"),
 		rpcdemo.WithTracingSpanName("test.Greeter"),
 	}
 	s := rpcdemo.NewServer(opts...)
-	if err := s.RegisterService("/test.Greeter", new(testdata.CalculatorService)); err != nil {
+	if err := s.RegisterService("test.Greeter", new(testdata.CalculatorService)); err != nil {
 		panic(err)
 	}
 	s.Serve()

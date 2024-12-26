@@ -248,9 +248,7 @@ func (s *Server) InitPlugins() error {
 		switch val := p.(type) {
 		case plugin.ResolverPlugin:
 			var services []string
-			// logs.Println("plugin is ",s.service.Name())
-			// logs.Println("selector is ",s.opts.selectorSvrAddr)
-			services = append(services, s.service.Name())
+			services=append(services, s.service.Name())
 			pluginOpts := []plugin.Option{
 				plugin.WithSelectorSvrAddr(s.opts.selectorSvrAddr),
 				plugin.WithSvrAddr(s.opts.address),
